@@ -6,24 +6,25 @@ public enum MyCollisionLayer : byte { Parts, SystemObjects}
 
 public static class MyCollisionLayerExtension {
 
-    public static CollisionFilter defaultFilter = new CollisionFilter()
+    public static CollisionFilter allFilter = new CollisionFilter()
+    {
+        BelongsTo = (1 << 0),
+        CollidesWith = (1 << 0) + (1 << 1),
+        GroupIndex = 0
+    };
+    public static CollisionFilter selectedFilter = new CollisionFilter()
+    {
+        BelongsTo = (uint)(1 << 1),
+        CollidesWith = (1 << 1),
+        GroupIndex = 0
+    };
+    public static CollisionFilter nonSelectedFilter = new CollisionFilter()
     {
         BelongsTo = (uint)(1 << 0),
-        CollidesWith = (1 << 0) + (1 << 1),
+        CollidesWith = (1 << 0),
         GroupIndex = 0
     };
-    public static CollisionFilter editorSpecialFilter_Select = new CollisionFilter()
-    {
-        BelongsTo = (uint)(1 << 1),
-        CollidesWith = (1 << 0) + (1 << 1),
-        GroupIndex = 0
-    };
-    public static CollisionFilter editorSpecialFilter_Move = new CollisionFilter()
-    {
-        BelongsTo = (uint)(1 << 1),
-        CollidesWith = ~(uint)(1 << 1),
-        GroupIndex = 0
-    };
+    
 
 
     public static CollisionFilter GetCollisionFilter(this MyCollisionFilters cl)

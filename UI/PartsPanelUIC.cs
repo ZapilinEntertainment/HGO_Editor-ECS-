@@ -123,7 +123,7 @@ public class PartsPanelUIC : MonoBehaviour, UIControllerInterface, IPointerDownH
                 if (cursorInEditorZone)
                 {
                     Unity.Physics.RaycastHit rh;
-                    var inputRay = raycastSystem.GetInputRay(MyCollisionLayerExtension.defaultFilter);
+                    var inputRay = raycastSystem.GetInputRay(MyCollisionLayerExtension.allFilter);
                     var e = SpawnSystem.SpawnPart(partsArray[selectedIndex].partType, inputRay.End );
                     detailSpawned = true;
                     raycastSystem.SelectPart(e);

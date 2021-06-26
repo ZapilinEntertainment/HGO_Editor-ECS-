@@ -38,16 +38,15 @@ public class SpawnSystem : SystemBase
     {
         var manager = World.DefaultGameObjectInjectionWorld.EntityManager;         
 
-        BlobAssetReference<Unity.Physics.Collider> collider;
         var entity = manager.CreateEntity(partArchetype);
         manager.SetComponentData(entity, new Translation() { Value = position });
         quaternion orientation = quaternion.identity;
         manager.SetComponentData(entity, new Rotation() { Value = orientation });
 
-        var renderData = new RenderMesh() { mesh = ResourcesMaster.GetPartMesh(ptype), material = m , receiveShadows = true, castShadows = UnityEngine.Rendering.ShadowCastingMode.On};
+        var renderData = new RenderMesh() { mesh = ResourcesMaster.GetPartMesh(ptype), material = m , receiveShadows = true,
+            castShadows = UnityEngine.Rendering.ShadowCastingMode.On, needMotionVectorPass = false};
         manager.SetSharedComponentData(entity, renderData);
-        collider = Unity.Physics.BoxCollider.Create(new BoxGeometry() { Size = 1f, Orientation = orientation }, MyCollisionLayerExtension.defaultFilter); 
-        manager.SetComponentData(entity, new PhysicsCollider() { Value = collider });
+        manager.SetComponentData(entity, new PhysicsCollider() { Value = ResourcesMaster.GetPartCollider(PartType.Cube) });
         //
         manager.SetComponentData(entity, new PartInfoComponent() { Value = ptype });
         return entity;
