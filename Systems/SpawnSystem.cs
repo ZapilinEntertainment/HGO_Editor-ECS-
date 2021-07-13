@@ -23,18 +23,22 @@ public class SpawnSystem : SystemBase
 
     public static Entity SpawnPart(PartType ptype, float3 position)
     {
-        return SpawnPart(ptype, position, ResourcesMaster.defaultMaterial);
+        return SpawnPart(ptype, position, ResourcesMaster.defaultMaterial, false);
     }
-    public static Entity SpawnPart(PartType ptype)
+    public static Entity SpawnPartForEditor(PartType ptype, float3 position)
     {
-        return SpawnPart(ptype, float3.zero, ResourcesMaster.defaultMaterial);
+        return SpawnPart(ptype, position, ResourcesMaster.defaultMaterial, true);
+    }
+    public static Entity SpawnPart(PartType ptype, bool editable)
+    {
+        return SpawnPart(ptype, float3.zero, ResourcesMaster.defaultMaterial, editable);
     }
     public static Entity SpawnPart(PartType ptype, UnityEngine.Material m)
     {
-        return SpawnPart(ptype, float3.zero, m);
+        return SpawnPart(ptype, float3.zero, m, false);
     }
 
-    public static Entity SpawnPart(PartType ptype, float3 position, UnityEngine.Material m)
+    public static Entity SpawnPart(PartType ptype, float3 position, UnityEngine.Material m, bool editable)
     {
         var manager = World.DefaultGameObjectInjectionWorld.EntityManager;         
 
@@ -46,9 +50,10 @@ public class SpawnSystem : SystemBase
         var renderData = new RenderMesh() { mesh = ResourcesMaster.GetPartMesh(ptype), material = m , receiveShadows = true,
             castShadows = UnityEngine.Rendering.ShadowCastingMode.On, needMotionVectorPass = false};
         manager.SetSharedComponentData(entity, renderData);
-        manager.SetComponentData(entity, new PhysicsCollider() { Value = ResourcesMaster.GetPartCollider(PartType.Cube) });
+        manager.SetComponentData(entity, new PhysicsCollider() { Value = ResourcesMaster.GetPartCollider(ptype) });
         //
         manager.SetComponentData(entity, new PartInfoComponent() { Value = ptype });
+        if (editable) manager.AddComponent<UsingByEditorMarker>(entity);
         return entity;
     }
     

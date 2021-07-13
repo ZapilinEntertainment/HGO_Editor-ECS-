@@ -7,70 +7,95 @@ using Unity.Rendering;
 using Unity.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 public class EditorRaycastSystem : ComponentSystem
 {
     public bool castingAvailable = true;
-    private bool alignment = true, detailSelected = false, mouseClickedDown = false;
+    private bool alignment = true, detailSelected = false, mouseClickedDown = false, controlElementTouched = false;
+    private int controlElementID = -1;
     private ElementsChangeSystem changeSystem;
-    public const float RAY_LENGTH = 7f, ALIGNMENT_LIMIT = 0.1f;
+    public const float RAY_LENGTH = 20f, ALIGNMENT_LIMIT = 0.1f;
     private BlobAssetReference<Unity.Physics.Collider> selectedColliderCopy;
+   
 
     protected override void OnStartRunning()
     {
-        SpawnSystem.SpawnPart(PartType.Cube, float3.zero);
-        SpawnSystem.SpawnPart(PartType.Cube, new float3(0.2f,-0.3f,1f));
-        SpawnSystem.SpawnPart(PartType.Cube, new float3(0.4f, -0.6f, 2f));
-        changeSystem = EntityManager.World.GetExistingSystem<ElementsChangeSystem>();
+        var manager = EntityManager;
+        var e = SpawnSystem.SpawnPartForEditor(PartType.Cube, float3.zero);;
+        e = SpawnSystem.SpawnPartForEditor(PartType.Cube, new float3(0.2f,-0.3f,1f));
+        e = SpawnSystem.SpawnPartForEditor(PartType.Cube, new float3(0.4f, -0.6f, 2f));
+        // ---
+        var world = manager.World;
+        changeSystem = world.GetExistingSystem<ElementsChangeSystem>();
+        //
+      
+        var tsystem = world.GetExistingSystem<TouchControlSystem>();
+        tsystem.touchStartedEvent += this.TouchStart;
+        tsystem.touchEndedEvent += this.TouchEnded;
+        tsystem.touchMovedEvent += this.TouchMoved;
     }
 
-    protected override void OnUpdate()
+    private void TouchStart(float2 mpos)
     {
-        bool clickedAtThisFrame = false;
-        if (Input.GetMouseButtonDown(0))
-        {
-            mouseClickedDown = true;
-            clickedAtThisFrame = true;
-        }
-        else
-        {
-            if (Input.GetMouseButtonUp(0)) mouseClickedDown = false;
-        }
-        if (castingAvailable && mouseClickedDown)
-        {
+        controlElementTouched = false;
+        if (castingAvailable)
+        {                       
             Unity.Physics.RaycastHit rh;
-
-            var manager = EntityManager;
-            var physicsSystem = manager.World.GetExistingSystem<Unity.Physics.Systems.BuildPhysicsWorld>();
+            var physicsSystem = EntityManager.World.GetExistingSystem<Unity.Physics.Systems.BuildPhysicsWorld>();
             var collisionWorld = physicsSystem.PhysicsWorld.CollisionWorld;
-            if (clickedAtThisFrame)
+            if (collisionWorld.CastRay(GetInputRay(mpos, MyCollisionLayerExtension.allDetailsFilter), out rh))
             {
-                if (collisionWorld.CastRay(GetInputRay(CollisionFilter.Default), out rh))
+                var types = EntityManager.GetComponentTypes(rh.Entity, Allocator.Temp);
+                if (!types.Contains(typeof(SelectedObjectMarker)))
                 {
-                    var types = manager.GetComponentTypes(rh.Entity, Allocator.Temp);
-                    if (types.Contains(typeof(PartInfoComponent))) SelectPart(rh.Entity);
+                    if (types.Contains(typeof(UsingByEditorMarker)) && types.Contains(typeof(PartInfoComponent))) SelectPart(rh.Entity);
                     else
                     {
                         if (types.Contains(typeof(ControllerElementComponent)))
                         {
-                            //controls
-                        }                            
+                            changeSystem.ControlElementStartTouch(rh);
+                            controlElementTouched = true;
+                            controlElementID = EntityManager.GetComponentData<ControllerElementComponent>(rh.Entity).ID;
+                        }
+                        else if (detailSelected) DeselectPart();
                     }
-                }
-                else
-                {
-                    if (detailSelected) DeselectPart();
-                }
+                }                
+                types.Dispose();
             }
             else
-            { // Moving
-                if (detailSelected && (math.abs(Input.GetAxis("Mouse X")) > 0.001f || math.abs(Input.GetAxis("Mouse Y")) > 0.001f))
-                {
-                    float3 pos;
-                    var inputRay = GetInputRay(MyCollisionLayerExtension.nonSelectedFilter);
-                    if (collisionWorld.CastRay(inputRay, out rh))
+            {
+                if (detailSelected) DeselectPart();
+            }
+
+        }
+        else if (detailSelected) DeselectPart();
+    }
+    private void TouchMoved(float2 screenpos, float2 dir)
+    {
+        if (detailSelected)
+        {
+            var manager = EntityManager;
+            var inputRay = GetInputRay(screenpos, MyCollisionLayerExtension.nonSelectedDetailsFilter);
+            Unity.Physics.RaycastHit rh;
+            float3 pos = float3.zero;
+            var physicsSystem = EntityManager.World.GetExistingSystem<Unity.Physics.Systems.BuildPhysicsWorld>();
+            var collisionWorld = physicsSystem.PhysicsWorld.CollisionWorld;
+            if (collisionWorld.CastRay(inputRay, out rh))
+            {
+                using (var types = manager.GetComponentTypes(rh.Entity, Allocator.Temp)) {
+                    if (controlElementTouched && types.Contains(typeof(ControllerElementComponent)))
                     {
-                        if (alignment)
+                        if (manager.GetComponentData<ControllerElementComponent>(rh.Entity).ID == controlElementID)
+                        {
+                            changeSystem.ControlMoveTouch(rh);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        if (changeSystem.editingATM) return;
+                        if ( alignment && types.Contains(typeof(LocalToWorld)))
                         {
                             var ltw = EntityManager.GetComponentData<LocalToWorld>(rh.Entity);
                             var worldToLocal = math.inverse(ltw.Value);
@@ -84,22 +109,41 @@ public class EditorRaycastSystem : ComponentSystem
                         }
                         else pos = rh.Position;
                     }
-                    else pos = inputRay.End;                   
-
-                    var array = manager.CreateEntityQuery(typeof(EditingObjectMarker)).ToEntityArray(Allocator.Temp);
-                    foreach (var e in array)
-                    {
-                        manager.SetComponentData(e, new Translation() { Value = pos + manager.GetComponentData<PartInfoComponent>(e).Value.GetExtents() * rh.SurfaceNormal });
-                   }
-                   array.Dispose();
                 }
             }
+            else
+            {
+                if (controlElementTouched)
+                {
+                    changeSystem.ControlMoveTouch(screenpos);
+                    return;
+                }
+                else pos = inputRay.End;
+            }
+            var array = manager.CreateEntityQuery(typeof(SelectedObjectMarker), typeof(UsingByEditorMarker), typeof(PartInfoComponent)).ToEntityArray(Allocator.Temp);
+            foreach (var e in array)
+            {
+                manager.SetComponentData(e, new Translation() { Value = pos + manager.GetComponentData<PartInfoComponent>(e).Value.GetExtents() * rh.SurfaceNormal });
+            }
+            array.Dispose();
+        }
+    }
+    private void TouchEnded(float2 endpos)
+    {
+        if (controlElementTouched)
+        {
+            controlElementTouched = false;
+            changeSystem.ControlElementStopTouch();
         }
     }
 
-    public RaycastInput GetInputRay(CollisionFilter cf)
+    protected override void OnUpdate()
     {
-        UnityEngine.Ray cameraRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+    }
+
+    public RaycastInput GetInputRay(float2 screenPixelPosition, CollisionFilter cf)
+    {
+        UnityEngine.Ray cameraRay = Camera.main.ScreenPointToRay(new Vector3(screenPixelPosition.x, screenPixelPosition.y, 0f));
         return new RaycastInput()
         {
             Start = cameraRay.origin,
@@ -125,35 +169,36 @@ public class EditorRaycastSystem : ComponentSystem
     public void SelectPart(Entity e)
     {
         var manager = EntityManager;
+        //previous deselection
         if (detailSelected)
         {
-            var array = manager.CreateEntityQuery(typeof(EditingObjectMarker)).ToEntityArray(Allocator.Temp);
+            var array = manager.CreateEntityQuery(typeof(SelectedObjectMarker), typeof(UsingByEditorMarker), typeof(PartInfoComponent)).ToEntityArray(Allocator.Temp);
             if (array.Length == 1 && array[0] == e) return;
             else DeselectPart();
         }
         //
         detailSelected = true;
-        manager.AddComponent<EditingObjectMarker>(e);
+        manager.AddComponent<SelectedObjectMarker>(e);
         selectedColliderCopy = manager.GetComponentData<PartInfoComponent>(e).Value.LoadMeshCollider();
             // BlobAssetReference<Unity.Physics.Collider>.Create(manager.GetComponentData<PhysicsCollider>(e).Value.Value);
-        selectedColliderCopy.Value.Filter = MyCollisionLayerExtension.selectedFilter;
+        selectedColliderCopy.Value.Filter = MyCollisionLayerExtension.selectedDetailsFilter;
         manager.SetComponentData(e, new PhysicsCollider() { Value = selectedColliderCopy });
         ChangeMaterial(e, ResourcesMaster.selectedMaterial);
-        changeSystem.Activate(manager.GetComponentData<Translation>(e).Value);    
+        changeSystem.PartWasSelected();    
     }
-    private void DeselectPart()
+    public void DeselectPart()
     {
         var manager = EntityManager;
-        var array = manager.CreateEntityQuery(typeof(EditingObjectMarker)).ToEntityArray(Allocator.Temp);
+        var array = manager.CreateEntityQuery(typeof(UsingByEditorMarker), typeof(PartInfoComponent)).ToEntityArray(Allocator.Temp);
         foreach (var e in array)
         {
             ChangeMaterial(e, ResourcesMaster.defaultMaterial);
             manager.SetComponentData(e, new PhysicsCollider() { Value = ResourcesMaster.GetPartCollider(manager.GetComponentData<PartInfoComponent>(e).Value) });
-            manager.RemoveComponent<EditingObjectMarker>(e);
+            manager.RemoveComponent<SelectedObjectMarker>(e);
         };
         array.Dispose();
         detailSelected = false;
-        changeSystem.Disable();
+        changeSystem.PartDeselected();
     }
 
     private void ChangeMaterial(Entity e, UnityEngine.Material material)

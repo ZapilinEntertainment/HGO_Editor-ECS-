@@ -73,7 +73,7 @@ public static class PartTypeExtension {
                     
                     return x;
                 }
-            default:  return Unity.Physics.BoxCollider.Create(new BoxGeometry() { Size = 1f, Orientation = i_orientation }, MyCollisionLayerExtension.allFilter);
+            default:  return Unity.Physics.BoxCollider.Create(new BoxGeometry() { Size = 1f, Orientation = i_orientation }, MyCollisionLayerExtension.allDetailsFilter);
         }
     }
 }

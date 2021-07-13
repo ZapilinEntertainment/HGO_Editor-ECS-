@@ -14,6 +14,7 @@ public class PartsPanelUIC : MonoBehaviour, UIControllerInterface, IPointerDownH
     private int rows = 10, columns = 5;
     private int selectedIndex = -1;
     private bool initialized = false, dragging = false, detailSpawned = false;
+    private Vector2 lastCursorPosition;
     private PartButton[] partsArray;
     private Rect partsWindowRect;
     private EditorRaycastSystem raycastSystem;
@@ -89,6 +90,7 @@ public class PartsPanelUIC : MonoBehaviour, UIControllerInterface, IPointerDownH
         var ppos = eventData.pressPosition;
         var scale = transform.parent.GetComponent<Canvas>().scaleFactor;
         ppos = new Vector2(ppos.x / (partsWindowRect.width * scale), 1f - ppos.y / (partsWindowRect.height * scale));
+        lastCursorPosition = ppos;
         detailSpawned = false;
         if (ppos.x > 1f | ppos.y < 0f)
         {
@@ -122,9 +124,10 @@ public class PartsPanelUIC : MonoBehaviour, UIControllerInterface, IPointerDownH
             {
                 if (cursorInEditorZone)
                 {
+                    raycastSystem.DeselectPart();
                     Unity.Physics.RaycastHit rh;
-                    var inputRay = raycastSystem.GetInputRay(MyCollisionLayerExtension.allFilter);
-                    var e = SpawnSystem.SpawnPart(partsArray[selectedIndex].partType, inputRay.End );
+                    var inputRay = raycastSystem.GetInputRay(lastCursorPosition, MyCollisionLayerExtension.allDetailsFilter);
+                    var e = SpawnSystem.SpawnPartForEditor(partsArray[selectedIndex].partType, inputRay.End );
                     detailSpawned = true;
                     raycastSystem.SelectPart(e);
                 }
